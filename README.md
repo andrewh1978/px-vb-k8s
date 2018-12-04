@@ -12,6 +12,7 @@ This will provision a Kubernetes cluster, along with Portworx, on a local Virtua
 # ssh-keygen -t rsa -b 2048 -f id_rsa
 ```
 This will allow SSH as root between the various nodes.
+
 4. Start the cluster:
 ```
 # vagrant up
