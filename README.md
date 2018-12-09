@@ -7,18 +7,19 @@ This will provision a Kubernetes cluster, along with Portworx, on a local Virtua
 1. Install [VirtualBox](https://www.virtualbox.org/wiki/Downloads).
 2. Clone this repo and cd to it.
 3. Edit `Vagrantfile` as necessary.
-4. Generate SSH keys:
+4. Edit CentOS-Base.repo as necessary (or delete to use default configuration).
+5. Generate SSH keys:
 ```
 $ ssh-keygen -t rsa -b 2048 -f id_rsa
 ```
 This will allow SSH as root between the various nodes.
 
-5. Start the cluster:
+6. Start the cluster:
 ```
 $ vagrant up
 ```
 
-6. Check the status of the Portworx cluster:
+7. Check the status of the Portworx cluster:
 ```
 $ vagrant ssh node1
 [vagrant@node1 ~]$ sudo /opt/pwx/bin/pxctl status
