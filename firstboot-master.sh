@@ -6,6 +6,9 @@ systemctl start docker
 docker run -p 5000:5000 -d --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=http://registry-1.docker.io -v /opt/shared/docker_registry_cache:/var/lib/registry registry:2
 cp /vagrant/docker /etc/sysconfig/docker
 systemctl restart docker
+docker pull portworx/oci-monitor
+docker pull openstorage/stork
+docker pull portworx/px-enterprise:2.0.0.1
 yum install -y device-mapper-persistent-data lvm2 kubelet kubeadm kubectl
 sed -i 's/cgroup-driver=systemd/cgroup-driver=cgroupfs/g' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
 systemctl enable docker kubelet
