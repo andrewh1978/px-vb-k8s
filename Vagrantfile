@@ -1,6 +1,6 @@
 vb_dir = "#{ENV['HOME']}/VirtualBox\ VMs"
 nodes = 3
-disk_size = 4096
+disk_size = 20480
 
 Vagrant.configure("2") do |config|
 
@@ -11,7 +11,6 @@ Vagrant.configure("2") do |config|
     sed -i s/SELINUX=enforcing/SELINUX=disabled/g /etc/selinux/config
     sed -i /swap/d /etc/fstab
     sed -i s/enabled=1/enabled=0/ /etc/yum/pluginconf.d/fastestmirror.conf
-    #modprobe br_netfilter
     mkdir /root/.ssh
     cp /vagrant/sysctl.conf /vagrant/hosts /etc
     cp /vagrant/*.repo /etc/yum.repos.d
