@@ -1,9 +1,0 @@
-[Unit]
-Description=Auto-execute post-install script
-After=network.target
-
-[Service]
-ExecStart=/bin/bash /root/firstboot.sh
-
-[Install]
-WantedBy=multi-user.target
