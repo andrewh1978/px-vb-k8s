@@ -4,7 +4,7 @@ This will provision a Kubernetes cluster, along with Portworx, on a local Virtua
 
 # How
 
-1. Install [VirtualBox](https://www.virtualbox.org/wiki/Downloads).
+1. Install [Vagrant](https://www.vagrantup.com/downloads.html) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads).
 2. Clone this repo and cd to it.
 3. Edit `Vagrantfile` as necessary.
 4. Edit CentOS-Base.repo as necessary (or delete to use default configuration).
