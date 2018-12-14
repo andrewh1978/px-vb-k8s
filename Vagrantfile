@@ -47,10 +47,11 @@ Vagrant.configure("2") do |config|
         mkdir /root/.kube
         wait %2
         kubeadm init --apiserver-advertise-address=192.168.99.99 --pod-network-cidr=10.244.0.0/16
-        /bin/cp /etc/kubernetes/admin.conf /root/.kube/config
+        cp /etc/kubernetes/admin.conf /root/.kube/config
         kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
         wait %1
-        kubectl apply -f 'https://install.portworx.com/2.0?kbver=1.9.10&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=px-demo&stork=true&st=k8s'
+        kubectl apply -f 'https://install.portworx.com/2.0?kbver=1.13.1&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=px-demo&stork=true&st=k8s&lh=true'
+        echo End
       ) &>/var/log/vagrant.bootstrap &
     SHELL
   end
@@ -59,6 +60,9 @@ Vagrant.configure("2") do |config|
     config.vm.define "node#{i}" do |node|
       node.vm.hostname = "node#{i}"
       node.vm.network "private_network", ip: "192.168.99.10#{i}", virtualbox__intnet: true
+      if i === 1
+        config.vm.network "forwarded_port", guest: 32678, host: 32678
+      end
       node.vm.provider "virtualbox" do |vb| 
         vb.memory = 3072
         vb.customize ["modifyvm", :id, "--name", "node#{i}"]
@@ -81,6 +85,7 @@ Vagrant.configure("2") do |config|
           done
           wait
           eval $command
+          echo End
         ) &>/var/log/vagrant.bootstrap &
       SHELL
     end
