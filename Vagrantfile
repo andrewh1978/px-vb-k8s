@@ -2,6 +2,13 @@ vb_dir = "#{ENV['HOME']}/VirtualBox\ VMs"
 nodes = 3
 disk_size = 20480
 
+open("hosts", "w") do |f|
+  f << "192.168.99.99 master\n"
+  (1..nodes).each do |n|
+    f << "192.168.99.10#{n} node#{n}\n"
+  end
+end
+
 Vagrant.configure("2") do |config|
 
   config.vm.box = "centos/7"
@@ -24,7 +31,7 @@ Vagrant.configure("2") do |config|
   SHELL
 
   config.vm.provider "virtualbox" do |vb|
-    vb.cpus = 2
+    vb.cpus = 4
   end
 
   config.vm.define "master" do |master|
