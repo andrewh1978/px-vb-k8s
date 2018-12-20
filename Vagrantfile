@@ -67,7 +67,7 @@ Vagrant.configure("2") do |config|
       node.vm.hostname = "node#{i}"
       node.vm.network "private_network", ip: "192.168.99.10#{i}", virtualbox__intnet: true
       if i === 1
-        config.vm.network "forwarded_port", guest: 32678, host: 32678
+        node.vm.network "forwarded_port", guest: 32678, host: 32678
       end
       node.vm.provider "virtualbox" do |vb| 
         vb.memory = 3072
