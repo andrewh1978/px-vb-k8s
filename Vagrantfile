@@ -31,7 +31,7 @@ Vagrant.configure("2") do |config|
   SHELL
 
   config.vm.provider "virtualbox" do |vb|
-    vb.cpus = 4
+    vb.cpus = 2
   end
 
   config.vm.define "master" do |master|
@@ -46,7 +46,7 @@ Vagrant.configure("2") do |config|
         systemctl start docker
         docker run -p 5000:5000 -d --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=http://registry-1.docker.io -v /opt/shared/docker_registry_cache:/var/lib/registry registry:2
         systemctl restart docker
-        (docker pull portworx/oci-monitor:2.0.0.1 ; docker pull openstorage/stork ; docker pull portworx/px-enterprise:2.0.0.1) &
+        (docker pull portworx/oci-monitor:2.0.1 ; docker pull openstorage/stork:2.0.1 ; docker pull portworx/px-enterprise:2.0.1) &
         kubeadm config images pull &
         systemctl enable docker kubelet
         systemctl start kubelet
