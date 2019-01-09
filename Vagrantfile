@@ -20,14 +20,14 @@ Vagrant.configure("2") do |config|
     sed -i /swap/d /etc/fstab
     sed -i s/enabled=1/enabled=0/ /etc/yum/pluginconf.d/fastestmirror.conf
     mkdir /root/.ssh
-    cp /vagrant/{sysctl.conf,hosts} /etc
+    cp /vagrant/hosts /etc
     cp /vagrant/*.repo /etc/yum.repos.d
     cp /vagrant/id_rsa /root/.ssh
     cp /vagrant/id_rsa.pub /root/.ssh/authorized_keys
     cp /vagrant/docker /etc/sysconfig
     chmod 600 /root/.ssh/id_rsa
     modprobe br_netfilter
-    sysctl -p
+    sysctl -w net.bridge.bridge-nf-call-iptables=1 >/etc/sysctl.conf
   SHELL
 
   config.vm.provider "virtualbox" do |vb|
