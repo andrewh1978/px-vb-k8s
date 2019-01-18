@@ -46,15 +46,14 @@ Vagrant.configure("2") do |config|
         docker run -p 5000:5000 -d --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=http://registry-1.docker.io -v /opt/shared/docker_registry_cache:/var/lib/registry registry:2
         systemctl enable docker kubelet
         systemctl restart docker kubelet
-        (docker pull portworx/oci-monitor:2.0.1 ; docker pull openstorage/stork:2.0.1 ; docker pull portworx/px-enterprise:2.0.1) &
-        kubeadm config images pull &
-        mkdir /root/.kube
-        wait %2
+        curl -so /tmp/px.yml 'https://install.portworx.com/2.0?kbver=1.13.1&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=px-demo&stork=true&st=k8s&lh=true'
+        cat /tmp/px.yml | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | grep -v gcr.io | xargs -n1 docker pull &
         kubeadm init --apiserver-advertise-address=192.168.99.99 --pod-network-cidr=10.244.0.0/16
+        mkdir /root/.kube
         cp /etc/kubernetes/admin.conf /root/.kube/config
         kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-        wait %1
-        kubectl apply -f 'https://install.portworx.com/2.0?kbver=1.13.1&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=px-demo&stork=true&st=k8s&lh=true'
+        wait
+        kubectl apply -f /tmp/px.yml
         echo End
       ) &>/var/log/vagrant.bootstrap &
     SHELL
