@@ -1,6 +1,7 @@
 vb_dir = "#{ENV['HOME']}/VirtualBox\ VMs"
 nodes = 3
 disk_size = 20480
+name = "px-test-cluster"
 
 open("hosts", "w") do |f|
   f << "192.168.99.99 master\n"
@@ -46,7 +47,7 @@ Vagrant.configure("2") do |config|
         docker run -p 5000:5000 -d --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=http://registry-1.docker.io -v /opt/shared/docker_registry_cache:/var/lib/registry registry:2
         systemctl enable docker kubelet
         systemctl restart docker kubelet
-        curl -so /tmp/px.yml "https://install.portworx.com/2.0?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \\$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=px-demo&stork=true&st=k8s&lh=true"
+        curl -so /tmp/px.yml "https://install.portworx.com/1.7?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \\$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true"
         cat /tmp/px.yml | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | grep -v gcr.io | xargs -n1 docker pull &
         kubeadm init --apiserver-advertise-address=192.168.99.99 --pod-network-cidr=10.244.0.0/16
         mkdir /root/.kube
