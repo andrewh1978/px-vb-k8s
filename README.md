@@ -1,12 +1,12 @@
 # What
 
-This will provision a Kubernetes cluster, along with Portworx, on a local VirtualBox instance.
+This will provision a Kubernetes cluster, along with Portworx, and an optional private registry, on a local VirtualBox instance.
 
 # How
 
 1. Install [Vagrant](https://www.vagrantup.com/downloads.html) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads).
 2. Clone this repo and cd to it.
-3. Edit `Vagrantfile` as necessary.
+3. Edit top section of `Vagrantfile` as necessary.
 4. Edit CentOS-Base.repo as necessary (or delete to use default configuration).
 5. Generate SSH keys:
 ```
@@ -14,12 +14,17 @@ $ ssh-keygen -t rsa -b 2048 -f id_rsa
 ```
 This will allow SSH as root between the various nodes.
 
-6. Start the cluster:
+6. Start the registry VM (optional):
+```
+vagrant up registry
+```
+
+7. Start the cluster:
 ```
 $ vagrant up
 ```
 
-7. Check the status of the Portworx cluster:
+8. Check the status of the Portworx cluster:
 ```
 $ vagrant ssh node1
 [vagrant@node1 ~]$ sudo /opt/pwx/bin/pxctl status
@@ -46,3 +51,24 @@ Global Storage Pool
 	Total Used    	:  3.1 GiB
 	Total Capacity	:  8.0 GiB
 ```
+
+# Notes
+
+The object is to provision everything on top of a base CentOS installation to make it easier to test different software versions. This is inherently slower than baking everything into a prebuilt image.
+
+After each VM is provisioned, the bootstrap process runs in the background (so Vagrant can continue provisioning the subsequent nodes in parallel). Various parts of the process are also run in the background and images prepulled to reduce bottlenecks.
+
+The process logs to `/var/log/vagrant.boostrap` on each node. When the process is completed, the line "End" is logged. If you wish to use the private registry VM, you *must* wait until you see "End", so all of the Docker images have been pulled before you try to provision any of the cluster.
+
+If you choose not to use the private registry, a Docker registry cache will run on the master node, and worker nodes will pull all of their docker.io images via the proxy to minimise bandwidth usage.
+
+On a 2018 MBP with 16GB RAM, the time taken to provison a cluster comprising a master and 3 workers is approximately 13 minutes (and 6 minutes for a single worker node cluster).
+
+# TODO
+
+ * Start CentOS yum mirror repo on registry VM
+ * Start K8s yum mirror repo on registry VM
+ * Allow airgapped provisioning:
+  * provide `flannel.yml` and image
+  * remove install.portworx.com dependencies
+  * remove `kubeadm config list images`
