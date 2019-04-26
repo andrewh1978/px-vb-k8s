@@ -19,11 +19,13 @@ Vagrant.configure("2") do |config|
     setenforce 0
     sed -i s/SELINUX=enforcing/SELINUX=disabled/g /etc/selinux/config
     swapoff -a
+    rm -f /swapfile
+    rpm -e linux-firmware
     sed -i /swap/d /etc/fstab
     sed -i s/enabled=1/enabled=0/ /etc/yum/pluginconf.d/fastestmirror.conf
-    mkdir /root/.ssh /etc/docker
+    mkdir -p /root/.ssh /etc/docker /repo/kubernetes /repo/centos7
     cp /vagrant/hosts /etc
-    cp /vagrant/*.repo /etc/yum.repos.d
+    cp /vagrant/*.repo* /etc/yum.repos.d
     cp /vagrant/id_rsa /root/.ssh
     cp /vagrant/id_rsa.pub /root/.ssh/authorized_keys
     cp /vagrant/docker /etc/sysconfig
@@ -31,6 +33,11 @@ Vagrant.configure("2") do |config|
     modprobe br_netfilter
     sysctl -w net.bridge.bridge-nf-call-iptables=1 >/etc/sysctl.conf
     echo '{"insecure-registries":["registry:5000"]}' >/etc/docker/daemon.json
+    if (echo >/dev/tcp/registry/6000) 2>/dev/null; then
+      cp /vagrant/CentOS-Base.repo.docker /etc/yum.repos.d/CentOS-Base.repo
+    else
+      cp /vagrant/CentOS-Base.repo.mirror /etc/yum.repos.d/CentOS-Base.repo
+    fi
   SHELL
 
   config.vm.provider "virtualbox" do |vb|
@@ -45,15 +52,26 @@ Vagrant.configure("2") do |config|
       vb.memory = 384
     end
     registry.vm.provision "shell", inline: <<-SHELL
-      ( yum install -y kubeadm docker
+      ( yum install -y docker
+        mv /etc/yum.repos.d/kubernetes.repo.new /etc/yum.repos.d/kubernetes.repo
+        for url in $(yum deplist kubeadm | awk 'BEGIN { print "kubeadm" } ; /provider/ { print $2 }' | xargs yumdownloader --urls ); do curl -o /repo/kubernetes/$(echo $url | cut -f 2- -d -) $url; done
+        yum localinstall -y /repo/kubernetes/*rpm
+        curl -o /root/flannel.yml https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+        curl -o /root/px.yml "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true"
+        curl -o /root/px-reg.yml "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true&reg=registry:5000"
         systemctl start docker
         systemctl enable docker
+        #mount 192.168.0.5:/raid/share/repos/centos/7 /repo/centos7
+        docker run --rm -v /repo/centos7:/var/www/html andrewh1978/centos7yumrepo /updaterepo.sh
+        docker run -d -p 6000:80 -v /repo/centos7:/var/www/html andrewh1978/centos7yumrepo
         docker run -d -p 5000:5000 --restart=always --name registry registry:2
-        PX_IMGS=$(curl -s "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true" | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u)
+        FLANNEL_IMG=$(awk '/image.*amd64/ {print$2}' /root/flannel.yml | sort -u)
+        PX_IMGS=$(cat /root/px.yml | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u)
         K8S_IMGS=$(kubeadm config images list)
-        echo $PX_IMGS $K8S_IMGS | xargs -n1 -P0 docker pull
-        echo -n $PX_IMGS $K8S_IMGS | xargs -n1 -d " " -i docker tag {} registry:5000/{}
-        echo -n $PX_IMGS $K8S_IMGS | xargs -n1 -d " " -i docker push registry:5000/{}
+        echo $PX_IMGS $K8S_IMGS $FLANNEL_IMG | xargs -n1 -P0 docker pull
+        echo -n $PX_IMGS $K8S_IMGS $FLANNEL_IMG | xargs -n1 -d " " -i docker tag {} registry:5000/{}
+        echo -n $PX_IMGS $K8S_IMGS $FLANNEL_IMG | xargs -n1 -d " " -i docker push registry:5000/{}
+        sed 's#image: \\(.*amd64\\)#image: registry:5000/\\1#' /root/flannel.yml >/root/flannel-reg.yml
         echo End
       ) &>/var/log/vagrant.bootstrap
     SHELL
@@ -67,13 +85,21 @@ Vagrant.configure("2") do |config|
       vb.memory = 2048
     end
     master.vm.provision "shell", inline: <<-SHELL
-      ( yum install -y kubeadm docker
-        systemctl start docker
-        echo >/dev/tcp/registry/5000 || docker run -p 5000:5000 -d --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=http://registry-1.docker.io -v /opt/shared/docker_registry_cache:/var/lib/registry registry:2
+      ( yum install -y docker
+        if echo >/dev/tcp/registry/5000; then
+          ssh-keyscan registry 2>&1 | grep ssh-rsa >>/root/.ssh/known_hosts
+          rsync -r -e ssh registry:/repo/kubernetes/ /repo/kubernetes/
+          yum localinstall -y /repo/kubernetes/*rpm
+        else
+          systemctl start docker
+          docker run -p 5000:5000 -d --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=http://registry-1.docker.io -v /opt/shared/docker_registry_cache:/var/lib/registry registry:2
+          mv /etc/yum.repos.d/kubernetes.repo.new /etc/yum.repos.d/kubernetes.repo
+          yum install -y kubeadm
+        fi
         systemctl enable docker kubelet
         systemctl restart docker kubelet
         if echo >/dev/tcp/registry/5000; then
-          kubeadm config images list | xargs -n1 -P0 -i docker pull registry:5000/{}
+          ssh registry docker images | awk '/^registry.*gcr/ {print$1":"$2 }' | xargs -n1 -P0 docker pull
           kubeadm init --apiserver-advertise-address=192.168.99.99 --pod-network-cidr=10.244.0.0/16 --image-repository=registry:5000/k8s.gcr.io
         else
           curl -s "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true" | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | grep -v gcr.io | xargs -n1 -P0 docker pull &
@@ -82,11 +108,12 @@ Vagrant.configure("2") do |config|
         fi
         mkdir /root/.kube
         cp /etc/kubernetes/admin.conf /root/.kube/config
-        kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-        wait
         if echo >/dev/tcp/registry/5000; then
-          kubectl apply -f "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true&reg=registry:5000"
+          ssh registry cat /root/flannel-reg.yml | kubectl apply -f -
+          ssh registry cat /root/px-reg.yml | kubectl apply -f -
         else
+          kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+          wait
           kubectl apply -f "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true"
         fi
         echo End
@@ -111,12 +138,20 @@ Vagrant.configure("2") do |config|
         vb.customize ['storageattach', :id, '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', "#{vb_dir}/disk#{i}.vdi"]
       end
       node.vm.provision "shell", inline: <<-SHELL
-        ( yum install -y kubeadm docker
+        ( yum install -y docker
+          if echo >/dev/tcp/registry/5000; then
+            ssh-keyscan registry 2>&1 | grep ssh-rsa >>/root/.ssh/known_hosts
+            rsync -r -e ssh registry:/repo/kubernetes/ /repo/kubernetes/
+            yum localinstall -y /repo/kubernetes/*rpm
+          else
+            mv /etc/yum.repos.d/kubernetes.repo.new /etc/yum.repos.d/kubernetes.repo
+            yum install -y kubeadm
+          fi
           systemctl enable docker kubelet
           systemctl restart docker kubelet
           if echo >/dev/tcp/registry/5000; then
-            kubeadm config images list | grep 'kube-proxy\\|pause' | xargs -n1 -P0 -i docker pull registry:5000/{} &
-            curl -s "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true&reg=registry:5000" | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | xargs -n1 -P0 docker pull &
+            ssh registry docker images | awk '/^registry.*gcr/ {print$1":"$2 }' | xargs -n1 -P0 docker pull &
+            ssh registry cat /root/px-reg.yml | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | xargs -n1 -P0 docker pull &
           else
             kubeadm config images list | grep 'kube-proxy\\|pause' | xargs -n1 -P0 docker pull &
             curl -s "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true" | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | grep gcr.io | xargs -n1 -P0 docker pull &

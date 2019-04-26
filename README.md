@@ -1,13 +1,15 @@
 # What
 
-This will provision a Kubernetes cluster, along with Portworx, and an optional private registry, on a local VirtualBox instance.
+This will provision a Kubernetes/PX cluster, and an optional private registry VM, on a local VirtualBox.
+
+If the registry VM is used, it will prepopulate a yum repo running in a Docker container (this could take several minutes), as well as a local registry with all of the Kubernetes and PX images, so the whole cluster can be built without the requirement for an outbound Internet connection. Once this registry is up, on a 2018 MBP with 16GB RAM, the time taken to provison a cluster comprising a master and 3 workers is approximately 12 minutes (or 6 minutes for a single worker node cluster).
 
 # How
 
 1. Install [Vagrant](https://www.vagrantup.com/downloads.html) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads).
 2. Clone this repo and cd to it.
-3. Edit top section of `Vagrantfile` as necessary.
-4. Edit CentOS-Base.repo as necessary (or delete to use default configuration).
+3. Edit top section of `Vagrantfile` as necessary. There is also a mount command that has been commented out in the registry section to persist the yum repo - uncomment and edit as appropriate if you wish to use it.
+4. Edit CentOS-Base.repo.mirror as necessary.
 5. Generate SSH keys:
 ```
 $ ssh-keygen -t rsa -b 2048 -f id_rsa
@@ -58,17 +60,6 @@ The object is to provision everything on top of a base CentOS installation to ma
 
 After each VM is provisioned, the bootstrap process runs in the background (so Vagrant can continue provisioning the subsequent nodes in parallel). Various parts of the process are also run in the background and images prepulled to reduce bottlenecks.
 
-The process logs to `/var/log/vagrant.boostrap` on each node. When the process is completed, the line "End" is logged. If you wish to use the private registry VM, you *must* wait until you see "End", so all of the Docker images have been pulled before you try to provision any of the cluster.
+The process logs to `/var/log/vagrant.boostrap` on each node. When the process is completed, the line "End" is logged. If you wish to use the private registry VM, it *must* complete provisioning, so all of the Docker images have been pulled before you try to provision any of the cluster.
 
 If you choose not to use the private registry, a Docker registry cache will run on the master node, and worker nodes will pull all of their docker.io images via the proxy to minimise bandwidth usage.
-
-On a 2018 MBP with 16GB RAM, the time taken to provison a cluster comprising a master and 3 workers is approximately 13 minutes (and 6 minutes for a single worker node cluster).
-
-# TODO
-
- * Start CentOS yum mirror repo on registry VM
- * Start K8s yum mirror repo on registry VM
- * Allow airgapped provisioning:
-  * provide `flannel.yml` and image
-  * remove install.portworx.com dependencies
-  * remove `kubeadm config list images`
