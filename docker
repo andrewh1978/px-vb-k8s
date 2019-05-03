@@ -1,7 +1,7 @@
 # /etc/sysconfig/docker
 
 # Modify these options if you want to change the way the docker daemon runs
-OPTIONS='--selinux-enabled --log-driver=journald --signature-verification=false'
+OPTIONS='--selinux-enabled --log-driver=journald --signature-verification=false --registry-mirror=http://master:5000'
 if [ -z "${DOCKER_CERT_PATH}" ]; then
     DOCKER_CERT_PATH=/etc/docker
 fi
@@ -24,4 +24,3 @@ fi
 #DOCKERDBINARY=/usr/bin/dockerd-latest
 #DOCKER_CONTAINERD_BINARY=/usr/bin/docker-containerd-latest
 #DOCKER_CONTAINERD_SHIM_BINARY=/usr/bin/docker-containerd-shim-latest
-OPTIONS=" --registry-mirror=http://master:5000"
