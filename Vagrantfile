@@ -5,8 +5,7 @@ name = "px-test-cluster"
 version = "2.0"
 
 if !File.exist?("id_rsa") or !File.exist?("id_rsa.pub")
-    puts("Please create SSH keys before running vagrant up.")
-    abort
+    abort("Please create SSH keys before running vagrant up.")
 end
 
 open("hosts", "w") do |f|
@@ -28,7 +27,7 @@ Vagrant.configure("2") do |config|
     rpm -e linux-firmware
     sed -i /swap/d /etc/fstab
     sed -i s/enabled=1/enabled=0/ /etc/yum/pluginconf.d/fastestmirror.conf
-    mkdir -p /root/.ssh /etc/docker /repo/kubernetes /repo/centos7
+    mkdir -p /root/.ssh /etc/docker /repo/kubernetes /repo/centos7 /root/.kube
     cp /vagrant/hosts /etc
     cp /vagrant/*.repo* /etc/yum.repos.d
     cp /vagrant/id_rsa /root/.ssh
@@ -67,8 +66,8 @@ Vagrant.configure("2") do |config|
         systemctl enable docker
         #mount 192.168.0.5:/raid/share/repos/centos/7 /repo/centos7
         docker run --rm -v /repo/centos7:/var/www/html andrewh1978/centos7yumrepo /updaterepo.sh
-        docker run -d -p 6000:80 -v /repo/centos7:/var/www/html andrewh1978/centos7yumrepo
-        docker run -d -p 5000:5000 --restart=always --name registry registry:2
+        docker run -d --name yum_repo --restart always -p 6000:80 -v /repo/centos7:/var/www/html andrewh1978/centos7yumrepo
+        docker run -d --name registry --restart always -p 5000:5000 -v /repo/registry:/var/lib/registry registry:2
         FLANNEL_IMG=$(awk '/image.*amd64/ {print$2}' /root/flannel.yml | sort -u)
         PX_IMGS=$(cat /root/px.yml | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u)
         K8S_IMGS=$(kubeadm config images list)
@@ -103,20 +102,16 @@ Vagrant.configure("2") do |config|
         fi
         systemctl enable docker kubelet
         systemctl restart docker kubelet
+        ln -s /etc/kubernetes/admin.conf /root/.kube/config
         if echo >/dev/tcp/registry/5000; then
           ssh registry docker images | awk '/^registry.*gcr/ {print$1":"$2 }' | xargs -n1 -P0 docker pull
           kubeadm init --apiserver-advertise-address=192.168.99.99 --pod-network-cidr=10.244.0.0/16 --image-repository=registry:5000/k8s.gcr.io
+          ssh registry cat /root/flannel-reg.yml | kubectl apply -f -
+          ssh registry cat /root/px-reg.yml | kubectl apply -f -
         else
           curl -s "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true" | awk '/image: /{print $2} /oci-monitor/{sub(/oci-monitor/,"px-enterprise",$2);print$2}' | sort -u | grep -v gcr.io | xargs -n1 -P0 docker pull &
           kubeadm config images list | xargs -n1 -P0 docker pull
           kubeadm init --apiserver-advertise-address=192.168.99.99 --pod-network-cidr=10.244.0.0/16
-        fi
-        mkdir /root/.kube
-        cp /etc/kubernetes/admin.conf /root/.kube/config
-        if echo >/dev/tcp/registry/5000; then
-          ssh registry cat /root/flannel-reg.yml | kubectl apply -f -
-          ssh registry cat /root/px-reg.yml | kubectl apply -f -
-        else
           kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
           wait
           kubectl apply -f "https://install.portworx.com/#{version}?kbver=$(kubectl version --short | awk -Fv '/Server Version: / {print \$3}')&b=true&s=%2Fdev%2Fsdb&m=eth1&d=eth1&c=#{name}&stork=true&st=k8s&lh=true"
